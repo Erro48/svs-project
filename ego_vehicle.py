@@ -259,6 +259,11 @@ def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2,
             if norm_velocity < 0:
                 mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
                 
+                try:
+                    alarm_sound.play()
+                except Exception as e:
+                    print(f"Errore durante la riproduzione del suono: {e}")
+
                 world.debug.draw_point(
                     radar_data.transform.location + fw_vec,
                     size=0.075,
@@ -294,6 +299,16 @@ def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     move_spectator_to(rear_camera_transform)
 
     pygame.init()
+
+def load_alarm_sound():
+    pygame.mixer.init()
+    alarm_sound = None
+    try:
+        alarm_sound = pygame.mixer.Sound("alarm_sound.mp3")
+    except Exception as e:
+        print(f"Errore durante il caricamento del file audio: {e}")
+    return alarm_sound
+
 screen = pygame.display.set_mode((200, 100))
 reverse = False
 obstacles_enabled = False
@@ -324,6 +339,7 @@ vehicle.set_transform(vehicle_transform)
 time.sleep(0.2)
 
 move_spectator_relative_to_vehicle(vehicle, carla.Location(x=1, y=0, z=5), carla.Rotation(yaw=0))
+alarm_sound = load_alarm_sound()
 
 running = True
 
