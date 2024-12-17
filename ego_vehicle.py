@@ -13,7 +13,9 @@ MQTT_MESSAGE = "warning: vehicle nearby"
 client = carla.Client('localhost', 2000)
 client.set_timeout(10.0)
 
-world = client.load_world("Town04")
+world = client.get_world()
+if(world.get_map().name != "Carla/Maps/Town04"):
+    world = client.load_world("Town04")
 spectator = world.get_spectator()
 
 # Functions
