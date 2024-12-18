@@ -11,7 +11,7 @@ MQTT_TOPIC = "svs-rcta"
 MQTT_MESSAGE = "warning: vehicle nearby"
 
 client = carla.Client('localhost', 2000)
-client.set_timeout(10.0)
+client.set_timeout(20.0)
 
 world = client.get_world()
 if(world.get_map().name != "Carla/Maps/Town04"):
@@ -226,6 +226,7 @@ def draw_radar_points(
 def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
     global reverse
     global last_message_time
+    global screen_color_start_time
 
     if not reverse:
         return
@@ -265,6 +266,10 @@ def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2,
                     alarm_sound.play()
                 except Exception as e:
                     print(f"Errore durante la riproduzione del suono: {e}")
+
+                if screen_color_start_time == None:
+                    screen_color_start_time = pygame.time.get_ticks()
+                    screen_color((255, 0, 0))
 
                 world.debug.draw_point(
                     radar_data.transform.location + fw_vec,
@@ -311,9 +316,23 @@ def load_alarm_sound():
         print(f"Errore durante il caricamento del file audio: {e}")
     return alarm_sound
 
+def screen_color(color):
+    screen.fill(color)
+    pygame.display.flip()
+
+def check_screen_color():
+    global screen_color_start_time
+
+    if screen_color_start_time is not None:
+        elapsed_time = pygame.time.get_ticks() - screen_color_start_time
+        if elapsed_time > 2000:
+            screen_color((0, 0, 0))
+            screen_color_start_time = None
+
 screen = pygame.display.set_mode((200, 100))
 reverse = False
 obstacles_enabled = False
+screen_color_start_time = None
 
 if obstacles_enabled:
     obstacles = spawn_obstacle_vehicles(
@@ -364,6 +383,7 @@ try:
                 elif key == pygame.K_s:
                     control = carla.VehicleControl(throttle=0, brake=1)
                     vehicle.apply_control(control)
+        check_screen_color()
         world.tick()
         pygame.display.flip()
 finally:
