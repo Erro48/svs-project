@@ -223,6 +223,42 @@ def draw_radar_points(
         color=color
     )
 
+TTC_THRESHOLD = 1 # second
+def hirst_graham_distance_algorithm(v_rel, vF):
+    return TTC_THRESHOLD * v_rel + 0.4905 * vF
+
+def compute_velocity_from_vector(velocity_vector):
+    v_x = velocity_vector.x
+    v_y = velocity_vector.y
+    v_z = velocity_vector.z
+    return math.sqrt(v_x**2 + v_y**2 + v_z**2)
+
+def get_radar_points_colors(velocity, velocity_range=0.8):
+    """
+    Returns the radar colors based on the velocities.
+    """
+
+    def clamp(min_v, max_v, value):
+        return max(min_v, min(value, max_v))
+
+    norm_velocity = velocity / velocity_range # range [-1, 1]
+    r = int(clamp(0.0, 1.0, 1.0 - norm_velocity) * 255.0)
+    g = int(clamp(0.0, 1.0, 1.0 - abs(norm_velocity)) * 255.0)
+    b = int(abs(clamp(- 1.0, 0.0, - 1.0 - norm_velocity)) * 255.0)
+
+    return norm_velocity, r, g, b
+
+def automatic_brake(vehicle):
+    """
+    Stops the vehicle if it is moving.
+    """
+
+    if compute_velocity_from_vector(vehicle.get_velocity()) > 0:
+        control = vehicle.get_control()
+        control.throttle = 0
+        control.brake = 1
+        vehicle.apply_control(control)
+
 def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
     global reverse
     global last_message_time
@@ -230,8 +266,6 @@ def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2,
 
     if not reverse:
         return
-    # velocity_range = 7.5 # m/s
-    velocity_range = 0.8
     current_rot = radar_data.transform.rotation
     for detect in radar_data:
         azi = math.degrees(detect.azimuth)
@@ -246,44 +280,46 @@ def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2,
                 yaw=current_rot.yaw + azi,
                 roll=current_rot.roll)).transform(fw_vec)
 
-        def clamp(min_v, max_v, value):
-            return max(min_v, min(value, max_v))
+        def compute_ttc(distance, delta_v):
+            if delta_v == 0: return None
+            return abs(distance / delta_v)
 
-        # detection
-        detection_threshold = 3 # meter
-        if detect.depth < detection_threshold:
+        norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
+        ttc = compute_ttc(detect.depth, detect.velocity)
+        if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
+            try:
+                alarm_sound.play()
+            except Exception as e:
+                print(f"Errore durante la riproduzione del suono: {e}")
 
-            # draw detected points
-            norm_velocity = detect.velocity / velocity_range # range [-1, 1]
-            r = int(clamp(0.0, 1.0, 1.0 - norm_velocity) * 255.0)
-            g = int(clamp(0.0, 1.0, 1.0 - abs(norm_velocity)) * 255.0)
-            b = int(abs(clamp(- 1.0, 0.0, - 1.0 - norm_velocity)) * 255.0)
+            if screen_color_start_time == None:
+                screen_color_start_time = pygame.time.get_ticks()
+                screen_color((255, 0, 0))
 
-            if norm_velocity < 0:
-                mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-                
-                try:
-                    alarm_sound.play()
-                except Exception as e:
-                    print(f"Errore durante la riproduzione del suono: {e}")
+            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
 
-                if screen_color_start_time == None:
-                    screen_color_start_time = pygame.time.get_ticks()
-                    screen_color((255, 0, 0))
-
-                world.debug.draw_point(
+            world.debug.draw_point(
                     radar_data.transform.location + fw_vec,
                     size=0.075,
                     life_time=0.06,
                     persistent_lines=False,
                     color=carla.Color(r, g, b))
+            
+            if detect.depth < collision_distance:
+                automatic_brake(vehicle)
+        
+        # keeps notifying if the obstacle is nearer than 1 meter
+        if detect.depth < 1:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
 
         # draw radars
-        world.debug.draw_point(radar_data.transform.location,
-                            size=0.075,
-                                life_time=0.06,
-                                persistent_lines=False,
-                                color=carla.Color(2, 0, 255))
+        if draw_radar:
+            world.debug.draw_point(radar_data.transform.location,
+                                size=0.075,
+                                    life_time=0.06,
+                                    persistent_lines=False,
+                                    color=radar_point_color)
 
 def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     """
