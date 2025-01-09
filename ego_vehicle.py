@@ -18,6 +18,8 @@ if(world.get_map().name != "Carla/Maps/Town04"):
     world = client.load_world("Town04")
 spectator = world.get_spectator()
 
+joystick = None
+
 # Functions
 def move_spectator_to(transform, distance=1.0, x=0, y=0, z=4, yaw=0, pitch=-30, roll=0):
     back_location = transform.location - transform.get_forward_vector() * distance
@@ -335,6 +337,7 @@ def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     rotation: carla.Rotation
         Absolute rotation.
     """
+    global joystick
     
     rear_camera_transform = vehicle.get_transform()
     rear_camera_transform.location = rear_camera_transform.location + location_offset
@@ -342,6 +345,11 @@ def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     move_spectator_to(rear_camera_transform)
 
     pygame.init()
+    pygame.joystick.init()
+
+    # Associa il joystick (volante e pedaliera)
+    joystick = pygame.joystick.Joystick(0)
+    joystick.init()
 
 def load_alarm_sound():
     pygame.mixer.init()
@@ -400,8 +408,32 @@ alarm_sound = load_alarm_sound()
 
 running = True
 
+# Funzione per normalizzare valori dei controlli via volante e pedaliera
+def normalize(value, deadzone=0.05):
+    if abs(value) < deadzone:
+        return 0.0
+    return value
+
 try:
+    # Controllo del veicolo
+    control = carla.VehicleControl()
+
     while running:
+        pygame.event.pump()
+
+        # Leggi input dal volante (es. asse 0 per sterzo)
+        steering = joystick.get_axis(0)  # Sterzo
+        throttle = joystick.get_axis(2)  # Pedale acceleratore
+        brake = joystick.get_axis(1)     # Pedale freno
+
+        # Normalizza e inverti valori, se necessario
+        control.steer = normalize(steering)
+        control.throttle = normalize(-throttle)  # Invertito per alcuni dispositivi
+        control.brake = normalize(-brake)       # Invertito per alcuni dispositivi
+
+        # Applica il controllo al veicolo
+        vehicle.apply_control(control)
+
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
                 key = event.key
