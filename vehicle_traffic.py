@@ -49,7 +49,7 @@ def spawn_vehicle_left_lane(
 
     return traffic_vehicle
 
-def spawn_two_vehicles(time_to_live=4):
+def spawn_two_vehicles():
     vehicle1_destroy = True
     vehicle2_destroy = True
     try:
