@@ -458,8 +458,11 @@ try:
         control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
         if not automatic_brake_engaged:
             control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
-            # Applica il controllo al veicolo
-            vehicle.apply_control(control)
+        else:
+            control.throttle = 0
+
+        # Applica il controllo al veicolo
+        vehicle.apply_control(control)
 
         # for i in range(1, joystick.get_numaxes()):
         #     print(f"Axe {i}: {joystick.get_axis(i)}")
@@ -483,6 +486,9 @@ try:
                 elif key == pygame.K_s:
                     control = carla.VehicleControl(throttle=0, brake=1)
                     vehicle.apply_control(control)
+                elif key == pygame.K_c:
+                    for actor in world.get_actors().filter("vehicle.*"):
+                        actor.destroy() 
             elif event.type == pygame.JOYBUTTONDOWN:
                 if event.button == 5:
                     print("Reverse engaged")
