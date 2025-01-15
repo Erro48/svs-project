@@ -225,7 +225,7 @@ def draw_radar_points(
         color=color
     )
 
-TTC_THRESHOLD = 1 # second
+TTC_THRESHOLD = 0.4 # second
 def hirst_graham_distance_algorithm(v_rel, vF):
     return TTC_THRESHOLD * v_rel + 0.4905 * vF
 
@@ -255,7 +255,9 @@ def automatic_brake(vehicle):
     Stops the vehicle if it is moving.
     """
 
+    global automatic_brake_engaged
     if compute_velocity_from_vector(vehicle.get_velocity()) > 0:
+        automatic_brake_engaged = True
         control = vehicle.get_control()
         control.throttle = 0
         control.brake = 1
@@ -263,11 +265,18 @@ def automatic_brake(vehicle):
 
 def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
     global reverse
+    global automatic_brake_engaged
     global last_message_time
     global screen_color_start_time
 
     if not reverse:
         return
+    
+    # deactivate automatic brake
+    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
+        print("Deactivate auto brake")
+        automatic_brake_engaged = False
+
     current_rot = radar_data.transform.rotation
     for detect in radar_data:
         azi = math.degrees(detect.azimuth)
@@ -375,6 +384,7 @@ def check_screen_color():
 
 screen = pygame.display.set_mode((200, 100))
 reverse = False
+automatic_brake_engaged = False
 obstacles_enabled = False
 screen_color_start_time = None
 
@@ -445,19 +455,16 @@ try:
         control.steer = normalize(steering)
         # control.throttle = normalize(throttle)  # Invertito per alcuni dispositivi
         # control.brake = normalize(brake)       # Invertito per alcuni dispositivi
-        control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
         control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
-
-        print(f"Throttle: {control.throttle}")
-        print(f"Brake: {control.brake}")
-        print("")
+        if not automatic_brake_engaged:
+            control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
+            # Applica il controllo al veicolo
+            vehicle.apply_control(control)
 
         # for i in range(1, joystick.get_numaxes()):
         #     print(f"Axe {i}: {joystick.get_axis(i)}")
         # print("")
 
-        # Applica il controllo al veicolo
-        vehicle.apply_control(control)
 
         for event in pygame.event.get():
             if event.type == pygame.KEYDOWN:
@@ -465,17 +472,22 @@ try:
                 print(f"Key pressed: {pygame.key.name(key)}")
                 if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
                     running = False
-                # elif key == pygame.K_r:
-                #     reverse = not reverse
-                #     control = carla.VehicleControl(reverse=reverse)
-                #     vehicle.apply_control(control)
-                # elif key == pygame.K_w:
-                #     print("Going " + ("backward" if reverse else "foreward"))
-                #     control = carla.VehicleControl(throttle=0.4, reverse=reverse)
-                #     vehicle.apply_control(control)
-                # elif key == pygame.K_s:
-                #     control = carla.VehicleControl(throttle=0, brake=1)
-                #     vehicle.apply_control(control)
+                elif key == pygame.K_r:
+                    reverse = not reverse
+                    control = carla.VehicleControl(reverse=reverse)
+                    vehicle.apply_control(control)
+                elif key == pygame.K_w:
+                    print("Going " + ("backward" if reverse else "foreward"))
+                    control = carla.VehicleControl(throttle=0.4, reverse=reverse)
+                    vehicle.apply_control(control)
+                elif key == pygame.K_s:
+                    control = carla.VehicleControl(throttle=0, brake=1)
+                    vehicle.apply_control(control)
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 5:
+                    print("Reverse engaged")
+                    reverse = not reverse
+                    control = carla.VehicleControl(reverse=reverse)
         check_screen_color()
         world.tick()
         pygame.display.flip()
