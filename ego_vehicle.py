@@ -403,7 +403,7 @@ vehicle.set_transform(vehicle_transform)
 
 time.sleep(0.2)
 
-move_spectator_relative_to_vehicle(vehicle, carla.Location(x=1, y=0, z=5), carla.Rotation(yaw=0))
+move_spectator_relative_to_vehicle(vehicle, carla.Location(x=-12, y=0, z=7), carla.Rotation(yaw=0))
 alarm_sound = load_alarm_sound()
 
 running = True
@@ -423,13 +423,38 @@ try:
 
         # Leggi input dal volante (es. asse 0 per sterzo)
         steering = joystick.get_axis(0)  # Sterzo
-        throttle = joystick.get_axis(2)  # Pedale acceleratore
-        brake = joystick.get_axis(1)     # Pedale freno
+        # throttle = joystick.get_axis(3)  # Pedale acceleratore
+        # brake = joystick.get_axis(4)     # Pedale freno
 
+        K2 = 1.6  # 1.6
+        throttleCmd = K2 + (2.05 * math.log10(
+            -0.7 * joystick.get_axis(3) + 1.4) - 1.2) / 0.92
+        if throttleCmd <= 0:
+            throttleCmd = 0
+        elif throttleCmd > 1:
+            throttleCmd = 1
+
+        brakeCmd = 1.6 + (2.05 * math.log10(
+            -0.7 * joystick.get_axis(4) + 1.4) - 1.2) / 0.92
+        if brakeCmd <= 0:
+            brakeCmd = 0
+        elif brakeCmd > 1:
+            brakeCmd = 1
+        
         # Normalizza e inverti valori, se necessario
         control.steer = normalize(steering)
-        control.throttle = normalize(-throttle)  # Invertito per alcuni dispositivi
-        control.brake = normalize(-brake)       # Invertito per alcuni dispositivi
+        # control.throttle = normalize(throttle)  # Invertito per alcuni dispositivi
+        # control.brake = normalize(brake)       # Invertito per alcuni dispositivi
+        control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
+        control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
+
+        print(f"Throttle: {control.throttle}")
+        print(f"Brake: {control.brake}")
+        print("")
+
+        # for i in range(1, joystick.get_numaxes()):
+        #     print(f"Axe {i}: {joystick.get_axis(i)}")
+        # print("")
 
         # Applica il controllo al veicolo
         vehicle.apply_control(control)
@@ -440,17 +465,17 @@ try:
                 print(f"Key pressed: {pygame.key.name(key)}")
                 if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
                     running = False
-                elif key == pygame.K_r:
-                    reverse = not reverse
-                    control = carla.VehicleControl(reverse=reverse)
-                    vehicle.apply_control(control)
-                elif key == pygame.K_w:
-                    print("Going " + ("backward" if reverse else "foreward"))
-                    control = carla.VehicleControl(throttle=0.4, reverse=reverse)
-                    vehicle.apply_control(control)
-                elif key == pygame.K_s:
-                    control = carla.VehicleControl(throttle=0, brake=1)
-                    vehicle.apply_control(control)
+                # elif key == pygame.K_r:
+                #     reverse = not reverse
+                #     control = carla.VehicleControl(reverse=reverse)
+                #     vehicle.apply_control(control)
+                # elif key == pygame.K_w:
+                #     print("Going " + ("backward" if reverse else "foreward"))
+                #     control = carla.VehicleControl(throttle=0.4, reverse=reverse)
+                #     vehicle.apply_control(control)
+                # elif key == pygame.K_s:
+                #     control = carla.VehicleControl(throttle=0, brake=1)
+                #     vehicle.apply_control(control)
         check_screen_color()
         world.tick()
         pygame.display.flip()
