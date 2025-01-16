@@ -11,6 +11,8 @@ MQTT_PORT = 1883
 MQTT_TOPIC = "svs-rcta"
 MQTT_MESSAGE = "warning: vehicle nearby"
 
+RADARS_DISTANCE = 2
+
 # Functions ##############################################################
 
 def log(message, event="vehicle"):
@@ -355,6 +357,19 @@ def screen_color(color):
     screen.fill(color)
     pygame.display.flip()
 
+def screen_half(color, side):
+    width, height = screen.get_size()
+    if side == "right":
+        rect = pygame.Rect(0, 0, width // 2, height)
+    elif side == "left":
+        rect = pygame.Rect(width // 2, 0, width // 2, height)
+    else:
+        raise ValueError("side must be 'left' or 'right'")
+    
+    screen.fill((0, 0, 0))  # Fill the entire screen with black before drawing the rectangle
+    pygame.draw.rect(screen, color, rect)
+    pygame.display.flip()
+
 def check_screen_color():
     global screen_color_start_time
 
@@ -446,6 +461,98 @@ def apply_control_using_keyboard():
                 destroy_actors()
                 log(f"Actors on map destroyed. Relunch the script...", "system")
 
+def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+    global reverse
+    global automatic_brake_engaged
+    global last_message_time
+    global screen_color_start_time
+    global detected_obstacle
+
+    if not reverse:
+        return
+
+    current_rot = radar_data.transform.rotation
+    for detect in radar_data:
+        azi = math.degrees(detect.azimuth)
+        alt = math.degrees(detect.altitude)
+        # The 0.25 adjusts a bit the distance so the dots can
+        # be properly seen
+        fw_vec = carla.Vector3D(x=detect.depth - 0.25)
+        carla.Transform(
+            carla.Location(),
+            carla.Rotation(
+                pitch=current_rot.pitch + alt,
+                yaw=current_rot.yaw + azi,
+                roll=current_rot.roll)).transform(fw_vec)
+
+        _, r, g, b = get_radar_points_colors(detect.velocity)
+        world.debug.draw_point(
+                radar_data.transform.location + fw_vec,
+                size=0.075,
+                life_time=0.06,
+                persistent_lines=False,
+                color=carla.Color(r, g, b))
+        
+        if detect.depth < RADARS_DISTANCE:
+            screen_half((0, 255, 0), "left")
+            detected_obstacle[0] = True
+        else:
+            detected_obstacle[0] = False
+
+        # draw radars
+        if draw_radar:
+            world.debug.draw_point(radar_data.transform.location,
+                                size=0.075,
+                                    life_time=0.06,
+                                    persistent_lines=False,
+                                    color=radar_point_color)
+
+def right_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+    global reverse
+    global automatic_brake_engaged
+    global last_message_time
+    global screen_color_start_time
+    global detected_obstacle
+
+    if not reverse:
+        return
+
+    current_rot = radar_data.transform.rotation
+    for detect in radar_data:
+        azi = math.degrees(detect.azimuth)
+        alt = math.degrees(detect.altitude)
+        # The 0.25 adjusts a bit the distance so the dots can
+        # be properly seen
+        fw_vec = carla.Vector3D(x=detect.depth - 0.25)
+        carla.Transform(
+            carla.Location(),
+            carla.Rotation(
+                pitch=current_rot.pitch + alt,
+                yaw=current_rot.yaw + azi,
+                roll=current_rot.roll)).transform(fw_vec)
+
+        _, r, g, b = get_radar_points_colors(detect.velocity)
+        world.debug.draw_point(
+                radar_data.transform.location + fw_vec,
+                size=0.075,
+                life_time=0.06,
+                persistent_lines=False,
+                color=carla.Color(r, g, b))
+        
+        if detect.depth < RADARS_DISTANCE:
+            screen_half((0, 255, 0), "right")
+            detected_obstacle[1] = True
+        else:
+            detected_obstacle[1] = False
+            
+        # draw radars
+        if draw_radar:
+            world.debug.draw_point(radar_data.transform.location,
+                                size=0.075,
+                                    life_time=0.06,
+                                    persistent_lines=False,
+                                    color=radar_point_color)
+
 ######################################################################
 #                              MAIN
 ######################################################################
@@ -511,8 +618,11 @@ vehicle.set_transform(vehicle_transform)
 
 # Radar configuration
 left_radar, right_radar = spawn_rear_radars(attach_to=vehicle)
-right_radar.listen(lambda image: radar_callback(image))
-left_radar.listen(lambda image: radar_callback(image))
+# right_radar.listen(lambda image: radar_callback(image))
+# left_radar.listen(lambda image: radar_callback(image))
+detected_obstacle = [False, False]
+right_radar.listen(lambda image: right_radar_callback(image,detected_obstacle))
+left_radar.listen(lambda image: left_radar_callback(image,detected_obstacle))
 
 time.sleep(0.2)
 
@@ -530,6 +640,15 @@ try:
 
     while running:
         pygame.event.pump()
+        side = ""
+        if detected_obstacle[0] and not detected_obstacle[1]:
+            side = "left"
+        elif detected_obstacle[1] and not detected_obstacle[0]:
+            side = "right"
+        # elif not detected_obstacle[0] and not detected_obstacle[1]:
+            # side = ""
+            
+        log(side, "radars")
 
         if simulator:
             apply_control_using_joystick(joystick, vehicle, control)
