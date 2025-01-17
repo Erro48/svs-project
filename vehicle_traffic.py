@@ -16,7 +16,7 @@ def spawn_vehicle(vehicle_index=0, spawn_index=0, pattern='vehicle.*'):
     return vehicle
 
 def spawn_vehicle_right_lane(
-        x=285, y=-227.5,
+        x=284, y=-215.5,
         spawn_delay=0,
         start_delay=1):
     time.sleep(spawn_delay)
@@ -28,7 +28,7 @@ def spawn_vehicle_right_lane(
     traffic_vehicle.set_transform(traffic_vehicle_transform)
 
     time.sleep(start_delay)
-    traffic_vehicle.apply_control(carla.VehicleControl(throttle=random.uniform(0.7, 1)))
+    traffic_vehicle.apply_control(carla.VehicleControl(throttle=0.3))#random.uniform(0.7, 1)))
 
     return traffic_vehicle
 
@@ -58,24 +58,24 @@ def spawn_two_vehicles():
                 vehicle1 = spawn_vehicle_right_lane()
                 vehicle1_destroy = False
 
-            if(vehicle2_destroy):
-                vehicle2 = spawn_vehicle_left_lane()
-                vehicle2_destroy = False
+            # if(vehicle2_destroy):
+            #     vehicle2 = spawn_vehicle_left_lane()
+            #     vehicle2_destroy = False
 
             if(vehicle1.get_transform().location.y > -192):
                 vehicle1_destroy = True
 
-            if(vehicle2.get_transform().location.y < -227.5):
-                vehicle2_destroy = True
+            # if(vehicle2.get_transform().location.y < -227.5):
+            #     vehicle2_destroy = True
 
             if(vehicle1_destroy):
                 vehicle1.destroy()
 
-            if(vehicle2_destroy):
-                vehicle2.destroy()
+            # if(vehicle2_destroy):
+            #     vehicle2.destroy()
     finally:
        vehicle1.destroy()
-       vehicle2.destroy()
+    #    vehicle2.destroy()
 
 #Run
 spawn_two_vehicles()
