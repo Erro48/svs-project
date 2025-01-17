@@ -1,5 +1,7 @@
-import math, pygame # type: ignore
+from modules import controls
+import math, os # type: ignore
 
+FILENAME = os.path.splitext(os.path.basename(__file__))[0]
 
 TTC_THRESHOLD = 0.4 # second
 
@@ -20,12 +22,3 @@ def compute_velocity_from_vector(velocity_vector):
     v_z = velocity_vector.z
     return math.sqrt(v_x**2 + v_y**2 + v_z**2)
 
-def load_alarm_sound():
-    pygame.mixer.init()
-    alarm_sound = None
-    try:
-        alarm_sound = pygame.mixer.Sound("alarm_sound.mp3")
-    except Exception as e:
-        # print(f"Errore durante il caricamento del file audio: {e}")
-        log(f"Errore durante il caricamento del file audio: {e}", "sound")
-    return alarm_sound

@@ -1,4 +1,11 @@
-import carla
+import carla, os
+from modules import controls, radars, utilities
+from modules.detected_obstacles import DetectedObstacle
+
+FILENAME = os.path.splitext(os.path.basename(__file__))[0]
+
+EGO_VEHICLE_INITIAL_LOCATION = carla.Location(x=280, y=-207.5, z=0.1) # z=0.1 used to make the car not clip with the ground
+EGO_VEHICLE_INITIAL_ROTATION = carla.Rotation(yaw=180)
 
 def move_spectator_to(transform, distance=1.0, x=0, y=0, z=4, yaw=0, pitch=-30, roll=0):
     back_location = transform.location - transform.get_forward_vector() * distance
@@ -111,6 +118,16 @@ def destroy_actors():
     for actor in world.get_actors().filter("vehicle.*"):
         actor.destroy()
 
+def load_alarm_sound():
+    controls.pygame.mixer.init()
+    alarm_sound = None
+    try:
+        alarm_sound = controls.pygame.mixer.Sound("alarm_sound.mp3")
+    except Exception as e:
+        # print(f"Errore durante il caricamento del file audio: {e}")
+        utilities.log(f"Errore durante il caricamento del file audio: {e}", FILENAME)
+    return alarm_sound
+
 
 _client = carla.Client('localhost', 2000)
 _client.set_timeout(20.0)
@@ -120,3 +137,20 @@ if(world.get_map().name != "Carla/Maps/Town04"):
     world = _client.load_world("Town04")
 
 _spectator = world.get_spectator()
+
+detected_obstacle = DetectedObstacle()
+alarm_sound = load_alarm_sound()
+
+# Vehicle configuration
+vehicle = spawn_vehicle()
+vehicle_transform = vehicle.get_transform()
+vehicle_transform.location = EGO_VEHICLE_INITIAL_LOCATION
+vehicle_transform.rotation = EGO_VEHICLE_INITIAL_ROTATION
+vehicle.set_transform(vehicle_transform)
+
+# Radar configuration
+left_radar, right_radar = radars.spawn_rear_radars(attach_to=vehicle, world=world)
+# right_radar.listen(lambda image: radar_callback(image))
+# left_radar.listen(lambda image: radar_callback(image))
+right_radar.listen(lambda image: radars.right_radar_callback(image, detected_obstacle))
+left_radar.listen(lambda image: radars.left_radar_callback(image, detected_obstacle))

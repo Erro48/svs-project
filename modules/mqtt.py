@@ -1,8 +1,12 @@
-import time
+import time, os
 import paho.mqtt.client as mqtt # type: ignore
-from modules.utilities import log
+
+from modules import utilities
+# from modules.utilities import log
 
 # Constants #####################################
+
+FILENAME = os.path.splitext(os.path.basename(__file__))[0]
 
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_PORT = 1883
@@ -16,7 +20,7 @@ DEFAULT_PUBLISH_INTERVAL = 1 # second
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, reason_code, properties):
     # print(f"Connected with result code {reason_code}")
-    log(f"Connected with result code {reason_code}", "MQTT")
+    utilities.log(f"Connected with result code {reason_code}", FILENAME)
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
     client.subscribe(MQTT_TOPIC + "/#")

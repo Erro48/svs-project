@@ -1,7 +1,16 @@
-import math
-import os, carla, pygame # type: ignore
-from modules.utilities import compute_velocity_from_vector, log
+import math, os, carla, pygame # type: ignore
+from modules import environment, utilities
+# from modules.utilities import compute_velocity_from_vector, log
+
+
 FILENAME = os.path.splitext(os.path.basename(__file__))[0]
+DEFAULT_COLOR = (0, 0, 0)
+screen_color_start_time = None
+_screen = None
+
+reverse = False
+running = True
+automatic_brake_engaged = False
 
 def toggle_reverse_gear():
     global reverse
@@ -9,34 +18,32 @@ def toggle_reverse_gear():
     control = carla.VehicleControl(reverse=reverse)
 
     reverse_gear_status = ("" if reverse else "dis") + "engaged"
-    log(f"Reverse gear {reverse_gear_status}", FILENAME)
+    utilities.log(f"Reverse gear {reverse_gear_status}", FILENAME)
 
     return control
 
-def apply_control_using_keyboard():
-    global reverse
-    global running
-    global vehicle
+def apply_control_using_keyboard(pygame_events):
+    global running, reverse
 
-    for event in pygame.event.get():
+    for event in pygame_events: #pygame.event.get():
         if event.type == pygame.KEYDOWN:
             key = event.key
-            log(f"{pygame.key.name(key)}", FILENAME)
+            utilities.log(f"{pygame.key.name(key)}", FILENAME)
             if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
                 running = False
             elif key == pygame.K_r:
                 control = toggle_reverse_gear()
-                vehicle.apply_control(control)
+                environment.vehicle.apply_control(control)
             elif key == pygame.K_w:
-                log("Going " + ("backward" if reverse else "foreward"), FILENAME)
+                utilities.log("Going " + ("backward" if reverse else "foreward"), FILENAME)
                 control = carla.VehicleControl(throttle=0.4, reverse=reverse)
-                vehicle.apply_control(control)
+                environment.vehicle.apply_control(control)
             elif key == pygame.K_s:
                 control = carla.VehicleControl(throttle=0, brake=1)
-                vehicle.apply_control(control)
+                environment.vehicle.apply_control(control)
             elif key == pygame.K_c:
-                destroy_actors()
-                log(f"Actors on map destroyed. Relunch the script...", FILENAME)
+                environment.destroy_actors()
+                utilities.log(f"Actors on map destroyed. Relunch the script...", FILENAME)
 
 def apply_control_using_joystick(joystick, vehicle, control):
     global automatic_brake_engaged
@@ -90,9 +97,55 @@ def automatic_brake(vehicle):
     """
 
     global automatic_brake_engaged
-    if compute_velocity_from_vector(vehicle.get_velocity()) > 0:
+    if utilities.compute_velocity_from_vector(vehicle.get_velocity()) > 0:
         automatic_brake_engaged = True
         control = vehicle.get_control()
         control.throttle = 0
         control.brake = 1
         vehicle.apply_control(control)
+
+def screen_setup(width=200, height=100):
+    global _screen
+    _screen = pygame.display.set_mode((width, height))
+
+def screen_color(color):
+    """
+    Fills the screen with the given color.
+    """
+
+    _screen.fill(color)
+    pygame.display.flip()
+
+def screen_half(color, side):
+    """
+    Fill one side of the screen with the given color.
+
+    Parameters
+    ---
+    color: (number, number, number)
+        Color to use to paint the half screen.
+    side: string
+        Side of the screen to paint. Possible values are "left" and "right"
+    """
+
+    width, height = _screen.get_size()
+    if side == "right":
+        rect = pygame.Rect(width // 2, 0, width // 2, height)
+    elif side == "left":
+        rect = pygame.Rect(0, 0, width // 2, height)
+    else:
+        raise ValueError("side must be 'left' or 'right'")
+    
+    _screen.fill(DEFAULT_COLOR)  # Fill the entire screen with black before drawing the rectangle
+    pygame.draw.rect(_screen, color, rect)
+    pygame.display.flip()
+
+def check_screen_color():
+    global screen_color_start_time
+
+    if screen_color_start_time is not None:
+        elapsed_time = pygame.time.get_ticks() - screen_color_start_time
+        if elapsed_time > 2000:
+            screen_color(DEFAULT_COLOR)
+            screen_color_start_time = None
+

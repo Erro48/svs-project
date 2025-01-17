@@ -1,7 +1,7 @@
+from modules import controls, environment
 import math, carla, pygame # type: ignore
-from modules.mqtt import MQTT_MESSAGE, mqtt_publish
-from modules.pygame_screen import screen_color
-from modules.utilities import TTC_THRESHOLD, compute_velocity_from_vector, hirst_graham_distance_algorithm, log
+import modules.mqtt as mqtt
+import modules.utilities as utilities
 import os
 
 FILENAME = os.path.splitext(os.path.basename(__file__))[0]
@@ -161,28 +161,21 @@ def get_radar_points_colors(velocity, velocity_range=0.8):
 
 def common_radar_function(radar_data,
                           draw_radar=True,
-                          radar_point_color=carla.Color(2, 0, 255),
-                          alarm_sound=None):
+                          radar_point_color=carla.Color(2, 0, 255)):
     """
     Function used by a radar to detect objects.
     """
 
-    global reverse
-    global automatic_brake_engaged
-    global last_message_time
-    global screen_color_start_time
-    global vehicle
-
     distance_sum = None
     velocity_sum = None
 
-    if not reverse:
+    if not controls.reverse:
         return distance_sum, velocity_sum
     
     # deactivate automatic brake
-    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
-        log("Deactivate auto brake", FILENAME)
-        automatic_brake_engaged = False
+    if controls.automatic_brake_engaged and utilities.compute_velocity_from_vector(environment.vehicle.get_velocity()) == 0:
+        utilities.log("Deactivate auto brake", FILENAME)
+        controls.automatic_brake_engaged = False
 
     current_rot = radar_data.transform.rotation
     for detect in radar_data:
@@ -205,22 +198,22 @@ def common_radar_function(radar_data,
         norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
         ttc = compute_ttc(detect.depth, detect.velocity)
         # norm_velocity < 0 => obstacle is approaching
-        if ttc != None and ttc < TTC_THRESHOLD:
+        if ttc != None and ttc < utilities.TTC_THRESHOLD:
         # if detect.depth <= RADARS_DISTANCE:
-            mqtt_publish(MQTT_MESSAGE)
+            mqtt.mqtt_publish(mqtt.MQTT_MESSAGE)
             try:
-                alarm_sound.play()
+                environment.alarm_sound.play()
             except Exception as e:
-                log(f"Error during alarm sound play", "sound")
+                utilities.log(f"Error during alarm sound play", "sound")
                 # print(f"Errore durante la riproduzione del suono: {e}")
 
-            if screen_color_start_time == None:
-                screen_color_start_time = pygame.time.get_ticks()
-                screen_color((255, 0, 0))
+            if controls.screen_color_start_time == None:
+                controls.screen_color_start_time = pygame.time.get_ticks()
+                controls.screen_color((255, 0, 0))
 
-            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
+            collision_distance = utilities.hirst_graham_distance_algorithm(-detect.velocity, utilities.compute_velocity_from_vector(environment.vehicle.get_velocity()))
 
-            world.debug.draw_point(
+            environment.world.debug.draw_point(
                     radar_data.transform.location + fw_vec,
                     size=0.075,
                     life_time=0.06,
@@ -234,15 +227,15 @@ def common_radar_function(radar_data,
             velocity_sum = velocity_sum + detect.velocity
 
             if detect.depth < collision_distance:
-                automatic_brake(vehicle)
+                controls.automatic_brake(environment.vehicle)
 
         # keeps notifying if the obstacle is nearer than 1 meter
         if detect.depth < 1:
-            mqtt_publish(MQTT_MESSAGE)
+            mqtt.mqtt_publish(mqtt.MQTT_MESSAGE)
 
         # draw radars
         if draw_radar:
-            world.debug.draw_point(radar_data.transform.location,
+            environment.world.debug.draw_point(radar_data.transform.location,
                                 size=0.075,
                                     life_time=0.06,
                                     persistent_lines=False,
@@ -252,8 +245,10 @@ def common_radar_function(radar_data,
     avg_velocity = velocity_sum / len(radar_data) if velocity_sum is not None else None
     return avg_distance, avg_velocity
 
-def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    global detected_obstacle
+def left_radar_callback(radar_data,
+                         detected_obstacle,
+                         draw_radar=True,
+                         radar_point_color=carla.Color(2, 0, 255)):
 
     distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
 
@@ -267,8 +262,10 @@ def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Col
     else:
         detected_obstacle.left_radar.setActive(False)
 
-def right_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    global detected_obstacle
+def right_radar_callback(radar_data,
+                         detected_obstacle,
+                         draw_radar=True,
+                         radar_point_color=carla.Color(2, 0, 255)):
 
     distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
 
