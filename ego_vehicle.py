@@ -78,6 +78,10 @@ def spawn_radar(attach_to=None,
 def on_connect(client, userdata, flags, reason_code, properties):
     # print(f"Connected with result code {reason_code}")
     log(f"Connected with result code {reason_code}", "MQTT")
+    print(f"""================================================================================
+    Mqtt messages on topic {MQTT_TOPIC}, using broker {MQTT_BROKER}:{MQTT_PORT}
+    Connect to https://www.hivemq.com/demos/websocket-client/ using port 8884 to check messages
+================================================================================""")
     # Subscribing in on_connect() means that if we lose the connection and
     # reconnect then subscriptions will be renewed.
     client.subscribe(MQTT_TOPIC + "/#")
@@ -107,7 +111,7 @@ def mqtt_publish(message, topic=MQTT_TOPIC, qos=1, publish_interval=1):
     tdelta = current_time - last_message_time
     if tdelta > publish_interval:
         last_message_time = time.time()
-        msg_info = mqttc.publish(topic, message, qos=qos)
+        msg_info = mqttc.publish(topic, message + f" at {datetime.now()}", qos=qos)
         unacked_publish.add(msg_info.mid)
 
 publish_interval = 1
