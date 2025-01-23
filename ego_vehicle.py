@@ -645,22 +645,6 @@ if obstacles_enabled:
         # patterns=["vehicle.mitsubishi.fusorosa", "vehicle.carlamotors.carlacola"]
     )
 
-# Vehicle configuration
-vehicle = spawn_vehicle()
-vehicle_transform = vehicle.get_transform()
-vehicle_transform.location = EGO_VEHICLE_INITIAL_LOCATION
-vehicle_transform.rotation = EGO_VEHICLE_INITIAL_ROTATION
-vehicle.set_transform(vehicle_transform)
-
-# Radar configuration
-left_radar, right_radar = spawn_rear_radars(attach_to=vehicle)
-# right_radar.listen(lambda image: radar_callback(image))
-# left_radar.listen(lambda image: radar_callback(image))
-right_radar.listen(lambda image: right_radar_callback(image))
-left_radar.listen(lambda image: left_radar_callback(image))
-
-detected_obstacle = [False, False]
-
 class DetectedObstacleRadar:
     def __init__(self):
         self.active = False
@@ -744,6 +728,19 @@ class DetectedObstacle:
 
 detected_obstacle = DetectedObstacle()
 
+# Vehicle configuration
+vehicle = spawn_vehicle()
+vehicle_transform = vehicle.get_transform()
+vehicle_transform.location = EGO_VEHICLE_INITIAL_LOCATION
+vehicle_transform.rotation = EGO_VEHICLE_INITIAL_ROTATION
+vehicle.set_transform(vehicle_transform)
+
+# Radar configuration
+left_radar, right_radar = spawn_rear_radars(attach_to=vehicle)
+# right_radar.listen(lambda image: radar_callback(image))
+# left_radar.listen(lambda image: radar_callback(image))
+right_radar.listen(lambda image: right_radar_callback(image))
+left_radar.listen(lambda image: left_radar_callback(image))
 time.sleep(0.2)
 
 move_spectator_relative_to_vehicle(vehicle, spectator_camera, carla.Rotation(yaw=0))
