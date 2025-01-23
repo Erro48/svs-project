@@ -255,75 +255,75 @@ def automatic_brake(vehicle):
         control.brake = 1
         vehicle.apply_control(control)
 
-def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    global reverse
-    global automatic_brake_engaged
-    global last_message_time
-    global screen_color_start_time
+# def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+#     global reverse
+#     global automatic_brake_engaged
+#     global last_message_time
+#     global screen_color_start_time
 
-    if not reverse:
-        return
+#     if not reverse:
+#         return
     
-    # deactivate automatic brake
-    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
-        print("Deactivate auto brake")
-        automatic_brake_engaged = False
+#     # deactivate automatic brake
+#     if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
+#         print("Deactivate auto brake")
+#         automatic_brake_engaged = False
 
-    current_rot = radar_data.transform.rotation
-    for detect in radar_data:
-        azi = math.degrees(detect.azimuth)
-        alt = math.degrees(detect.altitude)
-        # The 0.25 adjusts a bit the distance so the dots can
-        # be properly seen
-        fw_vec = carla.Vector3D(x=detect.depth - 0.25)
-        carla.Transform(
-            carla.Location(),
-            carla.Rotation(
-                pitch=current_rot.pitch + alt,
-                yaw=current_rot.yaw + azi,
-                roll=current_rot.roll)).transform(fw_vec)
+#     current_rot = radar_data.transform.rotation
+#     for detect in radar_data:
+#         azi = math.degrees(detect.azimuth)
+#         alt = math.degrees(detect.altitude)
+#         # The 0.25 adjusts a bit the distance so the dots can
+#         # be properly seen
+#         fw_vec = carla.Vector3D(x=detect.depth - 0.25)
+#         carla.Transform(
+#             carla.Location(),
+#             carla.Rotation(
+#                 pitch=current_rot.pitch + alt,
+#                 yaw=current_rot.yaw + azi,
+#                 roll=current_rot.roll)).transform(fw_vec)
 
-        def compute_ttc(distance, delta_v):
-            if delta_v == 0: return None
-            return abs(distance / delta_v)
+#         def compute_ttc(distance, delta_v):
+#             if delta_v == 0: return None
+#             return abs(distance / delta_v)
 
-        norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
-        ttc = compute_ttc(detect.depth, detect.velocity)
-        if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-            try:
-                alarm_sound.play()
-            except Exception as e:
-                log(f"Error during alarm sound play", "sound")
-                # print(f"Errore durante la riproduzione del suono: {e}")
+#         norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
+#         ttc = compute_ttc(detect.depth, detect.velocity)
+#         if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+#             mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
+#             try:
+#                 alarm_sound.play()
+#             except Exception as e:
+#                 log(f"Error during alarm sound play", "sound")
+#                 # print(f"Errore durante la riproduzione del suono: {e}")
 
-            if screen_color_start_time == None:
-                screen_color_start_time = pygame.time.get_ticks()
-                screen_color((255, 0, 0))
+#             if screen_color_start_time == None:
+#                 screen_color_start_time = pygame.time.get_ticks()
+#                 screen_color((255, 0, 0))
 
-            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
+#             collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
 
-            world.debug.draw_point(
-                    radar_data.transform.location + fw_vec,
-                    size=0.075,
-                    life_time=0.06,
-                    persistent_lines=False,
-                    color=carla.Color(r, g, b))
+#             world.debug.draw_point(
+#                     radar_data.transform.location + fw_vec,
+#                     size=0.075,
+#                     life_time=0.06,
+#                     persistent_lines=False,
+#                     color=carla.Color(r, g, b))
             
-            if detect.depth < collision_distance:
-                automatic_brake(vehicle)
+#             if detect.depth < collision_distance:
+#                 automatic_brake(vehicle)
         
-        # keeps notifying if the obstacle is nearer than 1 meter
-        if detect.depth < 1:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
+#         # keeps notifying if the obstacle is nearer than 1 meter
+#         if detect.depth < 1:
+#             mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
 
-        # draw radars
-        if draw_radar:
-            world.debug.draw_point(radar_data.transform.location,
-                                size=0.075,
-                                    life_time=0.06,
-                                    persistent_lines=False,
-                                    color=radar_point_color)
+#         # draw radars
+#         if draw_radar:
+#             world.debug.draw_point(radar_data.transform.location,
+#                                 size=0.075,
+#                                     life_time=0.06,
+#                                     persistent_lines=False,
+#                                     color=radar_point_color)
 
 def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     """
@@ -464,42 +464,6 @@ def apply_control_using_keyboard():
                 destroy_actors()
                 log(f"Actors on map destroyed. Relunch the script...", "system")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
     """
     Function used by a radar to detect objects.
@@ -515,6 +479,11 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
 
     if not reverse:
         return distance_sum, velocity_sum
+    
+    # deactivate automatic brake
+    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
+        print("Deactivate auto brake")
+        automatic_brake_engaged = False
 
     current_rot = radar_data.transform.rotation
     for detect in radar_data:
@@ -539,7 +508,21 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
 
         # norm_velocity < 0 => obstacle is approaching
         # if ttc != None and ttc < TTC_THRESHOLD:
-        if detect.depth <= RADARS_DISTANCE:
+        # if detect.depth <= RADARS_DISTANCE:
+        if ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
+            try:
+                alarm_sound.play()
+            except Exception as e:
+                log(f"Error during alarm sound play", "sound")
+                # print(f"Errore durante la riproduzione del suono: {e}")
+
+            if screen_color_start_time == None:
+                screen_color_start_time = pygame.time.get_ticks()
+                screen_color((255, 0, 0))
+
+            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
+
             world.debug.draw_point(
                     radar_data.transform.location + fw_vec,
                     size=0.075,
@@ -547,11 +530,18 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
                     persistent_lines=False,
                     color=carla.Color(r, g, b))
             
+            if detect.depth < collision_distance:
+                automatic_brake(vehicle)\
+            
             if distance_sum is None: distance_sum = 0
             if velocity_sum is None: velocity_sum = 0
 
             distance_sum = distance_sum + detect.depth
             velocity_sum = velocity_sum + detect.velocity
+
+        # keeps notifying if the obstacle is nearer than 1 meter
+        if detect.depth < 1:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
 
         # draw radars
         if draw_radar:
@@ -666,8 +656,8 @@ vehicle.set_transform(vehicle_transform)
 left_radar, right_radar = spawn_rear_radars(attach_to=vehicle)
 # right_radar.listen(lambda image: radar_callback(image))
 # left_radar.listen(lambda image: radar_callback(image))
-right_radar.listen(lambda image: right_radar_callback(image, radar_point_color=carla.Color(255, 0, 0)))
-left_radar.listen(lambda image: left_radar_callback(image, radar_point_color=carla.Color(0, 0, 255)))
+right_radar.listen(lambda image: right_radar_callback(image))
+left_radar.listen(lambda image: left_radar_callback(image))
 
 detected_obstacle = [False, False]
 
