@@ -14,7 +14,7 @@ MQTT_MESSAGE = "warning: vehicle nearby"
 RADARS_DISTANCE = 4 # distanza a cui il radar vede
 MINIMUM_DELTA_DISTANCE = 2 # minimo delta tra i due radar
 
-OBSTACLE_DIRECTION_DEFAULT_COLOR = (0, 255, 0)
+SCREEN_DEFAULT_COLOR = (255, 0, 0)
 
 # Functions ##############################################################
 
@@ -453,7 +453,7 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
 
             if screen_color_start_time == None:
                 screen_color_start_time = pygame.time.get_ticks()
-                screen_color((255, 0, 0))
+                screen_color(SCREEN_DEFAULT_COLOR)
 
             collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
 
@@ -602,7 +602,7 @@ class DetectedObstacle:
         self.right_radar = DetectedObstacleRadar()
         self.left_radar = DetectedObstacleRadar()
 
-    def getObstacleSide(self, mirrored=True, color=OBSTACLE_DIRECTION_DEFAULT_COLOR):
+    def getObstacleSide(self, mirrored=True, color=SCREEN_DEFAULT_COLOR):
         """
         Returns the side from which the obstacle is coming.
         
