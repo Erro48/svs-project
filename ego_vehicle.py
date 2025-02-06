@@ -259,76 +259,6 @@ def automatic_brake(vehicle):
         control.brake = 1
         vehicle.apply_control(control)
 
-# def radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-#     global reverse
-#     global automatic_brake_engaged
-#     global last_message_time
-#     global screen_color_start_time
-
-#     if not reverse:
-#         return
-    
-#     # deactivate automatic brake
-#     if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
-#         print("Deactivate auto brake")
-#         automatic_brake_engaged = False
-
-#     current_rot = radar_data.transform.rotation
-#     for detect in radar_data:
-#         azi = math.degrees(detect.azimuth)
-#         alt = math.degrees(detect.altitude)
-#         # The 0.25 adjusts a bit the distance so the dots can
-#         # be properly seen
-#         fw_vec = carla.Vector3D(x=detect.depth - 0.25)
-#         carla.Transform(
-#             carla.Location(),
-#             carla.Rotation(
-#                 pitch=current_rot.pitch + alt,
-#                 yaw=current_rot.yaw + azi,
-#                 roll=current_rot.roll)).transform(fw_vec)
-
-#         def compute_ttc(distance, delta_v):
-#             if delta_v == 0: return None
-#             return abs(distance / delta_v)
-
-#         norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
-#         ttc = compute_ttc(detect.depth, detect.velocity)
-#         if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
-#             mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-#             try:
-#                 alarm_sound.play()
-#             except Exception as e:
-#                 log(f"Error during alarm sound play", "sound")
-#                 # print(f"Errore durante la riproduzione del suono: {e}")
-
-#             if screen_color_start_time == None:
-#                 screen_color_start_time = pygame.time.get_ticks()
-#                 screen_color((255, 0, 0))
-
-#             collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
-
-#             world.debug.draw_point(
-#                     radar_data.transform.location + fw_vec,
-#                     size=0.075,
-#                     life_time=0.06,
-#                     persistent_lines=False,
-#                     color=carla.Color(r, g, b))
-            
-#             if detect.depth < collision_distance:
-#                 automatic_brake(vehicle)
-        
-#         # keeps notifying if the obstacle is nearer than 1 meter
-#         if detect.depth < 1:
-#             mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-
-#         # draw radars
-#         if draw_radar:
-#             world.debug.draw_point(radar_data.transform.location,
-#                                 size=0.075,
-#                                     life_time=0.06,
-#                                     persistent_lines=False,
-#                                     color=radar_point_color)
-
 def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     """
     Moves the spectator, using coordinates relative to a vehicle.
@@ -601,7 +531,7 @@ pygame.init()
 pygame.joystick.init()
 
 client = carla.Client('localhost', 2000)
-client.set_timeout(20.0)
+client.set_timeout(30.0)
 
 world = client.get_world()
 if(world.get_map().name != "Carla/Maps/Town04"):
