@@ -167,7 +167,7 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
         # norm_velocity < 0 => obstacle is approaching
         # if ttc != None and ttc < TTC_THRESHOLD:
         # if detect.depth <= RADARS_DISTANCE:
-        if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+        if (norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD) or detect.depth < 1.5: # and detect.depth < 5:
             mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
             try:
                 alarm_sound.play()
@@ -612,6 +612,9 @@ if obstacles_enabled:
         # [(286, -202.5, 0.1), (282, -210.5, 0.1)],
         # [(None, None, 90), (None, None, 180)],
         # patterns=["vehicle.mitsubishi.fusorosa", "vehicle.carlamotors.carlacola"]
+        # [(281, -210.5, 0.1)],
+        # [(None, None, 180)],
+        # patterns=["vehicle.tesla.model3"]
     )
 
 class DetectedObstacleRadar:
