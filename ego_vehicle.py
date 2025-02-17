@@ -1,8 +1,28 @@
+# +-----------------------+
+# |   Table of Contents   |
+# +-----------------------+
+# |                       |
+# | 0. Imports            |
+# | 1. Constants          |
+# | 2. Functions          |
+# |   2.1 Utility         |
+# |   2.2 Carla env       |
+# |   2.3 MQTT            |
+# |   2.4 UI interactions |
+# |   2.5 Controls        |
+# | 3 Main                |
+# |                       |
+# +-----------------------+
+
 import carla, time, pygame, math, random, cv2
 import numpy as np
 import paho.mqtt.client as mqtt
+from datetime import datetime, timedelta
 
-# Contstants #################################################################
+######################################################################
+#                         1. CONSTANTS                               #
+######################################################################
+
 EGO_VEHICLE_INITIAL_LOCATION = carla.Location(x=280, y=-207.5, z=0.1) # z=0.1 used to make the car not clip with the ground
 EGO_VEHICLE_INITIAL_ROTATION = carla.Rotation(yaw=180)
 
@@ -15,11 +35,40 @@ RADARS_DISTANCE = 4 # distanza a cui il radar vede
 MINIMUM_DELTA_DISTANCE = 2 # minimo delta tra i due radar
 
 SCREEN_DEFAULT_COLOR = (255, 0, 0)
+PUBLISH_INTERVAL = 1
+TTC_THRESHOLD = 0.4 # second
 
-# Functions ##############################################################
+
+######################################################################
+#                         2. FUNCTIONS                               #
+######################################################################
+
+# 2.1 Utility ########################################################
 
 def log(message, event="vehicle"):
+    """
+    Logs the given message, giving the possibility to set the event that triggered it.
+
+    Params
+    ---
+    messaeg: str
+        The message to display.
+    event: str (optional)
+        The event which triggered the message (default="vehicle")
+    """
+
     print(f"[{event}] {message}")
+
+def hirst_graham_distance_algorithm(v_rel, vF):
+    return TTC_THRESHOLD * v_rel + 0.4905 * vF
+
+def compute_velocity_from_vector(velocity_vector):
+    v_x = velocity_vector.x
+    v_y = velocity_vector.y
+    v_z = velocity_vector.z
+    return math.sqrt(v_x**2 + v_y**2 + v_z**2)
+
+# 2.2 Carla env ######################################################
 
 def move_spectator_to(transform, distance=1.0, x=0, y=0, z=4, yaw=0, pitch=-30, roll=0):
     back_location = transform.location - transform.get_forward_vector() * distance
@@ -32,7 +81,6 @@ def move_spectator_to(transform, distance=1.0, x=0, y=0, z=4, yaw=0, pitch=-30, 
     transform.rotation.roll = roll
     
     spectator_transform = carla.Transform(back_location, transform.rotation)
-    
     spectator.set_transform(spectator_transform)
 
 def spawn_vehicle(vehicle_index=0, spawn_index=0, pattern='vehicle.*'):
@@ -45,9 +93,6 @@ def spawn_vehicle(vehicle_index=0, spawn_index=0, pattern='vehicle.*'):
 def destroy_actors():
     for actor in world.get_actors().filter("vehicle.*"):
         actor.destroy()
-
-# def draw_on_screen(world, transform, content='O', color=carla.Color(0, 255, 0), life_time=20):
-#     world.debug.draw_string(transform.location, content, color=color, life_time=life_time)
 
 def spawn_camera(attach_to=None, transform=carla.Transform(carla.Location(x=1.2, z=1.2), carla.Rotation(pitch=-10)), width=800, height=600):
     camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
@@ -74,53 +119,131 @@ def spawn_radar(attach_to=None,
     radar = world.spawn_actor(radar_bp, transform, attach_to=attach_to)
     return radar
 
-# The callback for when the client receives a CONNACK response from the server.
-def on_connect(client, userdata, flags, reason_code, properties):
-    # print(f"Connected with result code {reason_code}")
-    log(f"Connected with result code {reason_code}", "MQTT")
-    print(f"""================================================================================
-    Mqtt messages on topic {MQTT_TOPIC}, using broker {MQTT_BROKER}:{MQTT_PORT}
-    Connect to https://www.hivemq.com/demos/websocket-client/ using port 8884 to check messages
-================================================================================""")
-    # Subscribing in on_connect() means that if we lose the connection and
-    # reconnect then subscriptions will be renewed.
-    client.subscribe(MQTT_TOPIC + "/#")
+def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+    """
+    Function used by a radar to detect objects.
+    """
 
-def on_publish(client, userdata, mid, reason_code, properties):
-    # reason_code and properties will only be present in MQTTv5. It's always unset in MQTTv3
-    try:
-        userdata.remove(mid)
-    except KeyError:
-        print("on_publish() is called with a mid not present in unacked_publish")
-        print("This is due to an unavoidable race-condition:")
-        print("* publish() return the mid of the message sent.")
-        print("* mid from publish() is added to unacked_publish by the main thread")
-        print("* on_publish() is called by the loop_start thread")
-        print("While unlikely (because on_publish() will be called after a network round-trip),")
-        print(" this is a race-condition that COULD happen")
-        print("")
-        print("The best solution to avoid race-condition is using the msg_info from publish()")
-        print("We could also try using a list of acknowledged mid rather than removing from pending list,")
-        print("but remember that mid could be re-used !")
-
-def mqtt_publish(message, topic=MQTT_TOPIC, qos=1, publish_interval=1):
+    global reverse
+    global automatic_brake_engaged
     global last_message_time
-    global unacked_publish
-    
-    current_time = time.time()
-    tdelta = current_time - last_message_time
-    if tdelta > publish_interval:
-        last_message_time = time.time()
-        msg_info = mqttc.publish(topic, message + f" at {datetime.now()}", qos=qos)
-        unacked_publish.add(msg_info.mid)
+    global screen_color_start_time
 
-publish_interval = 1
+    distance_sum = None
+    velocity_sum = None
+
+    if not reverse:
+        return distance_sum, velocity_sum
+    
+    # deactivate automatic brake
+    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
+        print("Deactivate auto brake")
+        automatic_brake_engaged = False
+
+    current_rot = radar_data.transform.rotation
+    for detect in radar_data:
+        azi = math.degrees(detect.azimuth)
+        alt = math.degrees(detect.altitude)
+        # The 0.25 adjusts a bit the distance so the dots can
+        # be properly seen
+        fw_vec = carla.Vector3D(x=detect.depth - 0.25)
+        carla.Transform(
+            carla.Location(),
+            carla.Rotation(
+                pitch=current_rot.pitch + alt,
+                yaw=current_rot.yaw + azi,
+                roll=current_rot.roll)).transform(fw_vec)
+
+        def compute_ttc(distance, delta_v):
+            if delta_v == 0: return None
+            return abs(distance / delta_v)
+        
+        norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
+        ttc = compute_ttc(detect.depth, detect.velocity)
+
+        # norm_velocity < 0 => obstacle is approaching
+        # if ttc != None and ttc < TTC_THRESHOLD:
+        # if detect.depth <= RADARS_DISTANCE:
+        if ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
+            try:
+                alarm_sound.play()
+            except Exception as e:
+                log(f"Error during alarm sound play", "sound")
+                # print(f"Errore durante la riproduzione del suono: {e}")
+
+            if screen_color_start_time == None:
+                screen_color_start_time = pygame.time.get_ticks()
+                screen_color(SCREEN_DEFAULT_COLOR)
+
+            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
+
+            world.debug.draw_point(
+                    radar_data.transform.location + fw_vec,
+                    size=0.075,
+                    life_time=0.06,
+                    persistent_lines=False,
+                    color=carla.Color(r, g, b))
+            
+            if detect.depth < collision_distance:
+                automatic_brake(vehicle)\
+            
+            if distance_sum is None: distance_sum = 0
+            if velocity_sum is None: velocity_sum = 0
+
+            distance_sum = distance_sum + detect.depth
+            velocity_sum = velocity_sum + detect.velocity
+
+        # keeps notifying if the obstacle is nearer than 1 meter
+        if detect.depth < 1:
+            mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
+
+        # draw radars
+        if draw_radar:
+            world.debug.draw_point(radar_data.transform.location,
+                                size=0.075,
+                                    life_time=0.06,
+                                    persistent_lines=False,
+                                    color=radar_point_color)
+    
+    avg_distance = distance_sum / len(radar_data) if distance_sum is not None else None
+    avg_velocity = velocity_sum / len(radar_data) if velocity_sum is not None else None
+    return avg_distance, avg_velocity
+
+def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+    global detected_obstacle
+
+    distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
+
+    if distance is None:
+        detected_obstacle.left_radar.setActive(False)
+        return
+
+    if distance < RADARS_DISTANCE:
+        detected_obstacle.left_radar.setActive(True)
+        detected_obstacle.left_radar.setDistance(distance)
+    else:
+        detected_obstacle.left_radar.setActive(False)
+
+def right_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
+    global detected_obstacle
+
+    distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
+
+    if distance is None:
+        detected_obstacle.right_radar.setActive(False)
+        return
+
+    if distance < RADARS_DISTANCE:
+        detected_obstacle.right_radar.setActive(True)
+        detected_obstacle.right_radar.setDistance(distance)
+    else:
+        detected_obstacle.right_radar.setActive(False)
 
 def spawn_obstacle_vehicles(
     locations,
     rotations,
-    patterns=[]
-):
+    patterns=[]):
     """
     Spawns a set of vehicles, in the given positions.
 
@@ -199,15 +322,12 @@ def spawn_rear_radars(attach_to, horizontal_fov=120, range=40):
                          range=range)
     return left_radar, right_radar
 
-from datetime import datetime, timedelta
-
 def draw_radar_points(
     location,
     size=0.075,
     life_time=0.06,
     persistent_lines=False,
-    color=carla.Color(255, 255, 255)
-):
+    color=carla.Color(255, 255, 255)):
     """
     Draws a set of point on the view, based on the locations given.
     """
@@ -220,16 +340,6 @@ def draw_radar_points(
         persistent_lines=persistent_lines,
         color=color
     )
-
-TTC_THRESHOLD = 0.4 # second
-def hirst_graham_distance_algorithm(v_rel, vF):
-    return TTC_THRESHOLD * v_rel + 0.4905 * vF
-
-def compute_velocity_from_vector(velocity_vector):
-    v_x = velocity_vector.x
-    v_y = velocity_vector.y
-    v_z = velocity_vector.z
-    return math.sqrt(v_x**2 + v_y**2 + v_z**2)
 
 def get_radar_points_colors(velocity, velocity_range=0.8):
     """
@@ -280,6 +390,49 @@ def move_spectator_relative_to_vehicle(vehicle, location_offset, rotation):
     rear_camera_transform.rotation = rotation
     move_spectator_to(rear_camera_transform)
 
+# 2.3 MQTT ###########################################################
+
+def on_connect(client, userdata, flags, reason_code, properties):
+    # print(f"Connected with result code {reason_code}")
+    log(f"Connected with result code {reason_code}", "MQTT")
+    print(f"""================================================================================
+    Mqtt messages on topic {MQTT_TOPIC}, using broker {MQTT_BROKER}:{MQTT_PORT}
+    Connect to https://www.hivemq.com/demos/websocket-client/ using port 8884 to check messages
+================================================================================""")
+    # Subscribing in on_connect() means that if we lose the connection and
+    # reconnect then subscriptions will be renewed.
+    client.subscribe(MQTT_TOPIC + "/#")
+
+def on_publish(client, userdata, mid, reason_code, properties):
+    # reason_code and properties will only be present in MQTTv5. It's always unset in MQTTv3
+    try:
+        userdata.remove(mid)
+    except KeyError:
+        print("on_publish() is called with a mid not present in unacked_publish")
+        print("This is due to an unavoidable race-condition:")
+        print("* publish() return the mid of the message sent.")
+        print("* mid from publish() is added to unacked_publish by the main thread")
+        print("* on_publish() is called by the loop_start thread")
+        print("While unlikely (because on_publish() will be called after a network round-trip),")
+        print(" this is a race-condition that COULD happen")
+        print("")
+        print("The best solution to avoid race-condition is using the msg_info from publish()")
+        print("We could also try using a list of acknowledged mid rather than removing from pending list,")
+        print("but remember that mid could be re-used !")
+
+def mqtt_publish(message, topic=MQTT_TOPIC, qos=1, publish_interval=1):
+    global last_message_time
+    global unacked_publish
+    
+    current_time = time.time()
+    tdelta = current_time - last_message_time
+    if tdelta > publish_interval:
+        last_message_time = time.time()
+        msg_info = mqttc.publish(topic, message + f" at {datetime.now()}", qos=qos)
+        unacked_publish.add(msg_info.mid)
+
+# 2.4 UI interaction #################################################
+
 def load_alarm_sound():
     pygame.mixer.init()
     alarm_sound = None
@@ -316,7 +469,7 @@ def check_screen_color():
             screen_color((0, 0, 0))
             screen_color_start_time = None
 
-# === Controls =======================================
+# 2.5 Controls #######################################################
 
 def toggle_reverse_gear():
     global reverse
@@ -398,134 +551,11 @@ def apply_control_using_keyboard():
                 destroy_actors()
                 log(f"Actors on map destroyed. Relunch the script...", "system")
 
-def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    """
-    Function used by a radar to detect objects.
-    """
-
-    global reverse
-    global automatic_brake_engaged
-    global last_message_time
-    global screen_color_start_time
-
-    distance_sum = None
-    velocity_sum = None
-
-    if not reverse:
-        return distance_sum, velocity_sum
-    
-    # deactivate automatic brake
-    if automatic_brake_engaged and compute_velocity_from_vector(vehicle.get_velocity()) == 0:
-        print("Deactivate auto brake")
-        automatic_brake_engaged = False
-
-    current_rot = radar_data.transform.rotation
-    for detect in radar_data:
-        azi = math.degrees(detect.azimuth)
-        alt = math.degrees(detect.altitude)
-        # The 0.25 adjusts a bit the distance so the dots can
-        # be properly seen
-        fw_vec = carla.Vector3D(x=detect.depth - 0.25)
-        carla.Transform(
-            carla.Location(),
-            carla.Rotation(
-                pitch=current_rot.pitch + alt,
-                yaw=current_rot.yaw + azi,
-                roll=current_rot.roll)).transform(fw_vec)
-
-        def compute_ttc(distance, delta_v):
-            if delta_v == 0: return None
-            return abs(distance / delta_v)
-        
-        norm_velocity, r, g, b = get_radar_points_colors(detect.velocity)
-        ttc = compute_ttc(detect.depth, detect.velocity)
-
-        # norm_velocity < 0 => obstacle is approaching
-        # if ttc != None and ttc < TTC_THRESHOLD:
-        # if detect.depth <= RADARS_DISTANCE:
-        if ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-            try:
-                alarm_sound.play()
-            except Exception as e:
-                log(f"Error during alarm sound play", "sound")
-                # print(f"Errore durante la riproduzione del suono: {e}")
-
-            if screen_color_start_time == None:
-                screen_color_start_time = pygame.time.get_ticks()
-                screen_color(SCREEN_DEFAULT_COLOR)
-
-            collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
-
-            world.debug.draw_point(
-                    radar_data.transform.location + fw_vec,
-                    size=0.075,
-                    life_time=0.06,
-                    persistent_lines=False,
-                    color=carla.Color(r, g, b))
-            
-            if detect.depth < collision_distance:
-                automatic_brake(vehicle)\
-            
-            if distance_sum is None: distance_sum = 0
-            if velocity_sum is None: velocity_sum = 0
-
-            distance_sum = distance_sum + detect.depth
-            velocity_sum = velocity_sum + detect.velocity
-
-        # keeps notifying if the obstacle is nearer than 1 meter
-        if detect.depth < 1:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=publish_interval)
-
-        # draw radars
-        if draw_radar:
-            world.debug.draw_point(radar_data.transform.location,
-                                size=0.075,
-                                    life_time=0.06,
-                                    persistent_lines=False,
-                                    color=radar_point_color)
-    
-    avg_distance = distance_sum / len(radar_data) if distance_sum is not None else None
-    avg_velocity = velocity_sum / len(radar_data) if velocity_sum is not None else None
-    return avg_distance, avg_velocity
-
-def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    global detected_obstacle
-
-    distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
-
-    if distance is None:
-        detected_obstacle.left_radar.setActive(False)
-        return
-
-    if distance < RADARS_DISTANCE:
-        detected_obstacle.left_radar.setActive(True)
-        detected_obstacle.left_radar.setDistance(distance)
-    else:
-        detected_obstacle.left_radar.setActive(False)
-
-def right_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
-    global detected_obstacle
-
-    distance, _ = common_radar_function(radar_data, draw_radar, radar_point_color)
-
-    if distance is None:
-        detected_obstacle.right_radar.setActive(False)
-        return
-
-    if distance < RADARS_DISTANCE:
-        detected_obstacle.right_radar.setActive(True)
-        detected_obstacle.right_radar.setDistance(distance)
-    else:
-        detected_obstacle.right_radar.setActive(False)
-
 ######################################################################
-#                              MAIN
+#                           3. MAIN                                  #
 ######################################################################
 
-# !!! Constants are placed on top of the file !!!
-
-# Initial setup #####################################################
+# Initial setup
 
 pygame.init()
 pygame.joystick.init()
@@ -540,10 +570,9 @@ spectator = world.get_spectator()
 
 joystick = None
 
-# Variables setup ####################################################
+# Variables setup
 
-# Flag that indicates if the script is ran on the simulator
-#   needs to be set manually
+# Flag that indicates if the script is ran on the simulator, needs to be set manually
 simulator = False
 screen = pygame.display.set_mode((200, 100))
 reverse = False
@@ -602,7 +631,7 @@ class DetectedObstacle:
         self.right_radar = DetectedObstacleRadar()
         self.left_radar = DetectedObstacleRadar()
 
-    def getObstacleSide(self, mirrored=True, color=SCREEN_DEFAULT_COLOR):
+    def get_obstacle_side(self, mirrored=True, color=SCREEN_DEFAULT_COLOR):
         """
         Returns the side from which the obstacle is coming.
         
@@ -692,7 +721,7 @@ try:
     while running:
         pygame.event.pump()
         if reverse:
-            side = detected_obstacle.getObstacleSide()
+            side = detected_obstacle.get_obstacle_side()
 
         if simulator:
             apply_control_using_joystick(joystick, vehicle, control)
