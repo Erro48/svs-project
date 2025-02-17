@@ -164,12 +164,12 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
         # norm_velocity < 0 => obstacle is approaching
         # if ttc != None and ttc < TTC_THRESHOLD:
         # if detect.depth <= RADARS_DISTANCE:
-        if ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
+        if norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD: # and detect.depth < 5:
             mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
             try:
                 alarm_sound.play()
             except Exception as e:
-                log(f"Error during alarm sound play", "sound")
+                log(f"Error during alarm sound play: {e}", "sound")
                 # print(f"Errore durante la riproduzione del suono: {e}")
 
             if screen_color_start_time == None:
@@ -186,7 +186,7 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
                     color=carla.Color(r, g, b))
             
             if detect.depth < collision_distance:
-                automatic_brake(vehicle)\
+                automatic_brake(vehicle)
             
             if distance_sum is None: distance_sum = 0
             if velocity_sum is None: velocity_sum = 0
