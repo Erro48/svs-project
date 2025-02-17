@@ -36,7 +36,7 @@ MINIMUM_DELTA_DISTANCE = 2 # minimo delta tra i due radar
 
 SCREEN_DEFAULT_COLOR = (255, 0, 0)
 PUBLISH_INTERVAL = 1
-TTC_THRESHOLD = 0.4 # second
+TTC_THRESHOLD = 0.4 # seconds
 
 
 ######################################################################
@@ -131,6 +131,9 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
 
     distance_sum = None
     velocity_sum = None
+    
+    distance_vector = []
+    velocity_vector = []
 
     if not reverse:
         return distance_sum, velocity_sum
@@ -187,12 +190,9 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
             
             if detect.depth < collision_distance:
                 automatic_brake(vehicle)
-            
-            if distance_sum is None: distance_sum = 0
-            if velocity_sum is None: velocity_sum = 0
 
-            distance_sum = distance_sum + detect.depth
-            velocity_sum = velocity_sum + detect.velocity
+            distance_vector.append(detect.depth)
+            velocity_vector.append(detect.velocity)
 
         # keeps notifying if the obstacle is nearer than 1 meter
         if detect.depth < 1:
@@ -205,9 +205,15 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
                                     life_time=0.06,
                                     persistent_lines=False,
                                     color=radar_point_color)
-    
-    avg_distance = distance_sum / len(radar_data) if distance_sum is not None else None
-    avg_velocity = velocity_sum / len(radar_data) if velocity_sum is not None else None
+
+    distance_vector.sort()
+    velocity_vector.sort()
+
+    distance_sum = sum(distance_vector) if distance_vector else None
+    velocity_sum = sum(velocity_vector) if velocity_vector else None
+
+    avg_distance = distance_sum / len(distance_vector) if distance_sum is not None else None
+    avg_velocity = velocity_sum / len(velocity_vector) if velocity_sum is not None else None
     return avg_distance, avg_velocity
 
 def left_radar_callback(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
