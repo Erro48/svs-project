@@ -431,7 +431,7 @@ def mqtt_publish(message, topic=MQTT_TOPIC, qos=1, publish_interval=1):
         msg_info = mqttc.publish(topic, message + f" at {datetime.now()}", qos=qos)
         unacked_publish.add(msg_info.mid)
 
-# 2.4 UI interaction #################################################
+# 2.4 UI interactions ################################################
 
 def load_alarm_sound():
     pygame.mixer.init()
