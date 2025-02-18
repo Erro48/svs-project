@@ -18,6 +18,7 @@ import carla, time, pygame, math, random, cv2
 import numpy as np
 import paho.mqtt.client as mqtt
 from datetime import datetime, timedelta
+import argparse
 
 ######################################################################
 #                         1. CONSTANTS                               #
@@ -578,8 +579,12 @@ joystick = None
 
 # Variables setup
 
-# Flag that indicates if the script is ran on the simulator, needs to be set manually
-simulator = False
+parser=argparse.ArgumentParser()
+parser.add_argument('-s', "--simulator", help="enables simulator mode", action="store_true")
+args=parser.parse_args()
+
+# Flag that indicates if the script is ran on the simulator
+simulator = args.simulator
 screen = pygame.display.set_mode((200, 100))
 reverse = False
 automatic_brake_engaged = False
