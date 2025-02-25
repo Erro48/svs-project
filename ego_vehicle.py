@@ -24,6 +24,9 @@ import argparse
 #                         1. CONSTANTS                               #
 ######################################################################
 
+CARLA_PORT = 2000
+CARLA_HOST = "localhost"
+
 EGO_VEHICLE_INITIAL_LOCATION = carla.Location(x=280, y=-207.5, z=0.1) # z=0.1 used to make the car not clip with the ground
 EGO_VEHICLE_INITIAL_ROTATION = carla.Rotation(yaw=180)
 
@@ -120,6 +123,8 @@ def spawn_radar(attach_to=None,
     radar = world.spawn_actor(radar_bp, transform, attach_to=attach_to)
     return radar
 
+obstacle_detected = False
+
 def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.Color(2, 0, 255)):
     """
     Function used by a radar to detect objects.
@@ -129,6 +134,7 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
     global automatic_brake_engaged
     global last_message_time
     global screen_color_start_time
+    global obstacle_detected
 
     distance_sum = None
     velocity_sum = None
@@ -169,7 +175,8 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
         # if ttc != None and ttc < TTC_THRESHOLD:
         # if detect.depth <= RADARS_DISTANCE:
         if (norm_velocity < 0 and ttc != None and ttc < TTC_THRESHOLD) or detect.depth < 1.5: # and detect.depth < 5:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
+            obstacle_detected = True
+            
             try:
                 alarm_sound.play()
             except Exception as e:
@@ -196,8 +203,8 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
             velocity_vector.append(detect.velocity)
 
         # keeps notifying if the obstacle is nearer than 1 meter
-        if detect.depth < 1:
-            mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
+        # if detect.depth < 1:
+        #     mqtt_publish(MQTT_MESSAGE, publish_interval=PUBLISH_INTERVAL)
 
         # draw radars
         if draw_radar:
@@ -488,75 +495,75 @@ def toggle_reverse_gear():
 
     return control
 
-def apply_control_using_joystick(joystick, vehicle, control):
-    global automatic_brake_engaged
-    global reverse
+# def apply_control_using_joystick(input_events, joystick, vehicle, control):
+#     global automatic_brake_engaged
+#     global reverse
 
-    def normalize(value, deadzone=0.05):
-        """
-        Normalize both steering wheel and pedals controls.
-        """
+#     def normalize(value, deadzone=0.05):
+#         """
+#         Normalize both steering wheel and pedals controls.
+#         """
 
-        if abs(value) < deadzone:
-            return 0.0
-        return value
+#         if abs(value) < deadzone:
+#             return 0.0
+#         return value
     
-    # Leggi input dal volante (es. asse 0 per sterzo)
-    steering = joystick.get_axis(0)  # Sterzo
+#     # Leggi input dal volante (es. asse 0 per sterzo)
+#     steering = joystick.get_axis(0)  # Sterzo
 
-    K2 = 1.6  # 1.6
-    throttleCmd = K2 + (2.05 * math.log10(
-        -0.7 * joystick.get_axis(3) + 1.4) - 1.2) / 0.92
-    if throttleCmd <= 0:
-        throttleCmd = 0
-    elif throttleCmd > 1:
-        throttleCmd = 1
+#     K2 = 1.6  # 1.6
+#     throttleCmd = K2 + (2.05 * math.log10(
+#         -0.7 * joystick.get_axis(3) + 1.4) - 1.2) / 0.92
+#     if throttleCmd <= 0:
+#         throttleCmd = 0
+#     elif throttleCmd > 1:
+#         throttleCmd = 1
 
-    brakeCmd = 1.6 + (2.05 * math.log10(
-        -0.7 * joystick.get_axis(4) + 1.4) - 1.2) / 0.92
-    if brakeCmd <= 0:
-        brakeCmd = 0
-    elif brakeCmd > 1:
-        brakeCmd = 1
+#     brakeCmd = 1.6 + (2.05 * math.log10(
+#         -0.7 * joystick.get_axis(4) + 1.4) - 1.2) / 0.92
+#     if brakeCmd <= 0:
+#         brakeCmd = 0
+#     elif brakeCmd > 1:
+#         brakeCmd = 1
     
-    # Normalizza e inverti valori, se necessario
-    control.steer = normalize(steering)
-    control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
-    if not automatic_brake_engaged:
-        control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
-    else:
-        control.throttle = 0
+#     # Normalizza e inverti valori, se necessario
+#     control.steer = normalize(steering)
+#     control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
+#     if not automatic_brake_engaged:
+#         control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
+#     else:
+#         control.throttle = 0
 
-    for event in pygame.event.get():
-        if event.type == pygame.JOYBUTTONDOWN:
-            if event.button == 5:
-                control = toggle_reverse_gear()
+#     for event in input_events:
+#         if event.type == pygame.JOYBUTTONDOWN:
+#             if event.button == 5:
+#                 control = toggle_reverse_gear()
 
-    vehicle.apply_control(control)
+#     vehicle.apply_control(control)
 
-def apply_control_using_keyboard():
-    global reverse
-    global running
+# def apply_control_using_keyboard(input_events):
+#     global reverse
+#     global running
 
-    for event in pygame.event.get():
-        if event.type == pygame.KEYDOWN:
-            key = event.key
-            log(f"{pygame.key.name(key)}", "key pressed")
-            if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
-                running = False
-            elif key == pygame.K_r:
-                control = toggle_reverse_gear()
-                vehicle.apply_control(control)
-            elif key == pygame.K_w:
-                log("Going " + ("backward" if reverse else "foreward"))
-                control = carla.VehicleControl(throttle=0.4, reverse=reverse)
-                vehicle.apply_control(control)
-            elif key == pygame.K_s:
-                control = carla.VehicleControl(throttle=0, brake=1)
-                vehicle.apply_control(control)
-            elif key == pygame.K_c:
-                destroy_actors()
-                log(f"Actors on map destroyed. Relunch the script...", "system")
+#     for event in input_events:
+#         if event.type == pygame.KEYDOWN:
+#             key = event.key
+#             log(f"{pygame.key.name(key)}", "key pressed")
+#             if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
+#                 running = False
+#             elif key == pygame.K_r:
+#                 control = toggle_reverse_gear()
+#                 vehicle.apply_control(control)
+#             elif key == pygame.K_w:
+#                 log("Going " + ("backward" if reverse else "foreward"))
+#                 control = carla.VehicleControl(throttle=0.4, reverse=reverse)
+#                 vehicle.apply_control(control)
+#             elif key == pygame.K_s:
+#                 control = carla.VehicleControl(throttle=0, brake=1)
+#                 vehicle.apply_control(control)
+#             elif key == pygame.K_c:
+#                 destroy_actors()
+#                 log(f"Actors on map destroyed. Relunch the script...", "system")
 
 ######################################################################
 #                           3. MAIN                                  #
@@ -567,7 +574,7 @@ def apply_control_using_keyboard():
 pygame.init()
 pygame.joystick.init()
 
-client = carla.Client('localhost', 2000)
+client = carla.Client(CARLA_HOST, CARLA_PORT)
 client.set_timeout(30.0)
 
 world = client.get_world()
@@ -655,6 +662,8 @@ class DetectedObstacle:
             Indicates whether the returned side is shown mirrored relative to the side from which the obstacle comes.
         """
 
+
+        global obstacle_detected
         side = ""
 
         # Quando un oggetto è molto spostato da un lato (o destra o sinistra)
@@ -685,6 +694,12 @@ class DetectedObstacle:
         else:
             side = ""
             screen_color((0, 0, 0))
+
+        if obstacle_detected and side != "":
+            obstacle_detected = False
+            log(f"Obstacle coming from {side} side")
+            mqtt_publish(MQTT_MESSAGE + ' ' + side, publish_interval=PUBLISH_INTERVAL)
+
 
         return side
     
@@ -737,10 +752,77 @@ try:
         if reverse:
             side = detected_obstacle.get_obstacle_side()
 
-        if simulator:
-            apply_control_using_joystick(joystick, vehicle, control)
+        input_events = pygame.event.get()
+        # if simulator:
+        #     apply_control_using_joystick(input_events, joystick, vehicle, control)
 
-        apply_control_using_keyboard()
+        # apply_control_using_keyboard(input_events)
+
+        if simulator:
+            def normalize(value, deadzone=0.05):
+                """
+                Normalize both steering wheel and pedals controls.
+                """
+
+                if abs(value) < deadzone:
+                    return 0.0
+                return value
+            
+            # Leggi input dal volante (es. asse 0 per sterzo)
+            steering = joystick.get_axis(0)  # Sterzo
+
+            K2 = 1.6  # 1.6
+            throttleCmd = K2 + (2.05 * math.log10(
+                -0.7 * joystick.get_axis(3) + 1.4) - 1.2) / 0.92
+            if throttleCmd <= 0:
+                throttleCmd = 0
+            elif throttleCmd > 1:
+                throttleCmd = 1
+
+            brakeCmd = 1.6 + (2.05 * math.log10(
+                -0.7 * joystick.get_axis(4) + 1.4) - 1.2) / 0.92
+            if brakeCmd <= 0:
+                brakeCmd = 0
+            elif brakeCmd > 1:
+                brakeCmd = 1
+            
+            # Normalizza e inverti valori, se necessario
+            control.steer = normalize(steering)
+            if not automatic_brake_engaged:
+                control.brake = 1 - brakeCmd      # Invertito per alcuni dispositivi
+                control.throttle = 1 - throttleCmd  # Invertito per alcuni dispositivi
+            else:
+                control.throttle = 0
+                control.brake = 1
+            
+            for event in input_events:
+                if event.type == pygame.JOYBUTTONDOWN:
+                    if event.button == 5:
+                        control = toggle_reverse_gear()
+
+            vehicle.apply_control(control)
+
+        # keyboard control
+        for event in input_events:
+            if event.type == pygame.KEYDOWN:
+                key = event.key
+                log(f"{pygame.key.name(key)}", "key pressed")
+                if key == pygame.QUIT or key == pygame.K_ESCAPE or key == pygame.K_q:
+                    running = False
+                elif key == pygame.K_r:
+                    control = toggle_reverse_gear()
+                    vehicle.apply_control(control)
+                elif key == pygame.K_w:
+                    log("Going " + ("backward" if reverse else "foreward"))
+                    control = carla.VehicleControl(throttle=0.4, reverse=reverse)
+                    vehicle.apply_control(control)
+                elif key == pygame.K_s:
+                    control = carla.VehicleControl(throttle=0, brake=1)
+                    vehicle.apply_control(control)
+                elif key == pygame.K_c:
+                    destroy_actors()
+                    log(f"Actors on map destroyed. Relunch the script...", "system")
+
 
         check_screen_color()
         world.tick()
