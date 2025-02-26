@@ -736,6 +736,9 @@ try:
         pygame.event.pump()
         if reverse:
             side = detected_obstacle.get_obstacle_side()
+        else:
+            side = ""
+            screen_color((0, 0, 0))
 
         input_events = pygame.event.get()
         # if simulator:
@@ -807,7 +810,7 @@ try:
                 elif key == pygame.K_c:
                     destroy_actors()
                     log(f"Actors on map destroyed. Relunch the script...", "system")
-
+        
         world.tick()
         pygame.display.flip()
 finally:
