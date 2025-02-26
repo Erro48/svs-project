@@ -133,7 +133,6 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
     global reverse
     global automatic_brake_engaged
     global last_message_time
-    global screen_color_start_time
     global obstacle_detected
 
     distance_sum = None
@@ -182,10 +181,6 @@ def common_radar_function(radar_data, draw_radar=True, radar_point_color=carla.C
             except Exception as e:
                 log(f"Error during alarm sound play: {e}", "sound")
                 # print(f"Errore durante la riproduzione del suono: {e}")
-
-            if screen_color_start_time == None:
-                screen_color_start_time = pygame.time.get_ticks()
-                screen_color(SCREEN_DEFAULT_COLOR)
 
             collision_distance = hirst_graham_distance_algorithm(-detect.velocity, compute_velocity_from_vector(vehicle.get_velocity()))
 
@@ -474,15 +469,6 @@ def screen_half(color, side):
     pygame.draw.rect(screen, color, rect)
     pygame.display.flip()
 
-def check_screen_color():
-    global screen_color_start_time
-
-    if screen_color_start_time is not None:
-        elapsed_time = pygame.time.get_ticks() - screen_color_start_time
-        if elapsed_time > 2000:
-            screen_color((0, 0, 0))
-            screen_color_start_time = None
-
 # 2.5 Controls #######################################################
 
 def toggle_reverse_gear():
@@ -596,7 +582,6 @@ screen = pygame.display.set_mode((200, 100))
 reverse = False
 automatic_brake_engaged = False
 obstacles_enabled = False
-screen_color_start_time = None
 running = True
 points = np.zeros((600, 800, 4), dtype=np.uint8)
 alarm_sound = load_alarm_sound()
@@ -823,8 +808,6 @@ try:
                     destroy_actors()
                     log(f"Actors on map destroyed. Relunch the script...", "system")
 
-
-        check_screen_color()
         world.tick()
         pygame.display.flip()
 finally:
